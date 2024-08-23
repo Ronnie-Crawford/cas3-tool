@@ -4,7 +4,7 @@ from pyfaidx import Fasta
 
 from config_loader import config
 
-def find_size(genes_df : pd.DataFrame):
+def find_size(genes_df : pd.DataFrame) -> pd.DataFrame:
 
     """
     Finds the size of each gene, irrespective of gene direction.
@@ -20,7 +20,7 @@ def find_size(genes_df : pd.DataFrame):
 
     return genes_df
 
-def find_isolation(genes_df):
+def find_isolation(genes_df: pd.DataFrame) -> pd.DataFrame:
 
     """
     Find the name and position of genes nearest upstream and downstream to each gene,
@@ -65,7 +65,7 @@ def find_isolation(genes_df):
 
     return genes_df
 
-def find_nearest_genes(gene, chromosome_df):
+def find_nearest_genes(gene: pd.Series, chromosome_df: pd.DataFrame) -> pd.Series:
 
     """
     The function used by "find_isolation()" to find neighbouring genes for a given gene
@@ -108,9 +108,9 @@ def find_nearest_genes(gene, chromosome_df):
 
     return pd.Series([nearest_upstream_name, nearest_upstream_start, nearest_upstream_end, nearest_downstream_name, nearest_downstream_start, nearest_downstream_end])
 
-def find_search_windows(genes_df):
+def find_search_windows(genes_df: pd.DataFrame) -> pd.DataFrame:
 
-    genome = Fasta(config["GENOME_SEQUENCE_PATH"])
+    genome = Fasta(config["PATHS"]["GENOME"])
     chromosome_dfs = []
 
     for chromosome in config["CHROMOSOMES"]:
@@ -138,30 +138,84 @@ def find_search_windows(genes_df):
             chromosome_df["nearest_downstream_start"],
             chromosome_df["end"] + config["SEARCH_WINDOW_DOWNSTREAM_SIZE_MAX"]
             )
-        chromosome_df["number_motifs_upstream"] = chromosome_df.apply(
-            lambda gene : fetch_fasta_sequence(genome, chromosome, gene["upstream_window_start"], gene["upstream_window_end"]), axis = 1
-        )
-        chromosome_df["number_motifs_downstream"] = chromosome_df.apply(
-            lambda gene : fetch_fasta_sequence(genome, chromosome, gene["downstream_window_start"], gene["downstream_window_end"]), axis = 1
-        )
-
+        
+        chromosome_df["upstream_window_sequence"] = chromosome_df.apply(
+            lambda gene: genome[f"{chromosome}"][int(gene["upstream_window_start"]):int(gene["upstream_window_end"])].seq, axis = 1
+            )
+        chromosome_df["downstream_window_sequence"] = chromosome_df.apply(
+            lambda gene: genome[f"{chromosome}"][int(gene["downstream_window_start"]):int(gene["downstream_window_end"])].seq, axis = 1
+            )
+        
         chromosome_dfs.append(chromosome_df)
-
+        
     genes_df = pd.concat(chromosome_dfs, ignore_index=True)
 
     return genes_df
-
-def fetch_fasta_sequence(genome, chromosome, start, end):
-
-    chromosome = f"{chromosome}"
-    start = int(start)
-    end = int(end)
-
-    searched_sequence = genome[chromosome][start:end].seq
-    number_of_motifs = 0
-
+        
+def find_motifs_for_all_genes(genes_df: pd.DataFrame) -> pd.DataFrame:        
+    
+    motifs_for_all_genes = []
+    
     for motif in config["MOTIFS"]:
-
-        number_of_motifs += searched_sequence.count(motif)
-
-    return int(number_of_motifs)
+        
+        motifs_for_single_gene_dfs = genes_df.apply(lambda gene: find_motifs_for_single_gene(gene, motif), axis = 1)
+        motifs_for_single_gene_df = pd.concat(motifs_for_single_gene_dfs.tolist(), ignore_index = True)
+        motifs_for_all_genes.append(motifs_for_single_gene_df)
+        motifs_df = pd.concat(motifs_for_all_genes, ignore_index = True)
+        
+    return motifs_df
+    
+def find_motifs_for_single_gene(gene, motif):
+    
+    gene_name = gene["gene"]
+    gene_chromosome = gene["seqname"]
+    gene_upstream_window = gene["upstream_window_sequence"]
+    gene_downstream_window = gene["downstream_window_sequence"]
+    gene_upstream_start = gene["upstream_window_start"]
+    gene_downstream_start = gene["downstream_window_start"]
+    motif_downstream_length = config["GUIDE_LENGTH"]
+    
+    occurences = []
+    location = 0
+    
+    while True:
+        
+        location = gene_upstream_window.find(motif, location)
+        
+        if location == -1:
+            
+            break
+        
+        occurences.append({
+            "motif": motif,
+            "gene": gene_name,
+            "chromosome": gene_chromosome,
+            "motif_start": gene_upstream_start + location,
+            "motif_downstream_sequence": gene_upstream_window[location:location + motif_downstream_length]
+        })
+        
+        location += len(motif)
+    
+    location = 0
+    
+    while True:
+        
+        location = gene_downstream_window.find(motif, location)
+        
+        if location == -1:
+            
+            break
+        
+        occurences.append({
+            "motif": motif,
+            "gene": gene_name,
+            "chromosome": gene_chromosome,
+            "motif_start": gene_downstream_start + location,
+            "motif_downstream_sequence": gene_downstream_window[location:location + motif_downstream_length]
+        })
+        
+        location += len(motif)
+    
+    motif_df = pd.DataFrame(occurences)
+    
+    return motif_df

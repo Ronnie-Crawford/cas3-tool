@@ -12,7 +12,7 @@ def read_genome_sequence():
 
         print("Reading genome sequence file.")
 
-        genome_sequence = Fasta(config["GENOME_SEQUENCE_PATH"])
+        genome_sequence = Fasta(config["PATHS"]["GENOME"])
 
     except:
 
@@ -20,13 +20,13 @@ def read_genome_sequence():
 
     return genome_sequence
 
-def read_essentiality():
+def read_essentiality() -> pd.DataFrame:
 
     try:
 
         print("Reading essentiality file.")
 
-        essentiality_df = pd.read_csv(config["ESSENTIALITY_PATH"], sep = "\t")
+        essentiality_df = pd.read_csv(config["PATHS"]["ESSENTIALITY"], sep = "\t")
         essentiality_df = essentiality_df[essentiality_df["lfc"] < config["GENE_ESSENTIALITY_THRESHOLD"]]
         essentiality_df["gene"] = essentiality_df["gene"].str.upper()
 
@@ -36,7 +36,7 @@ def read_essentiality():
 
     return essentiality_df
 
-def read_genome_annotations():
+def read_genome_annotations() -> pd.DataFrame:
 
     try:
 
@@ -49,7 +49,7 @@ def read_genome_annotations():
             'seqname': str, 'source': str, 'feature': str, 'start': int, 'end': int, 'score': str, 'strand': str, 'frame': str, 'attribute': str
         }
         annotations_df = pd.read_csv(
-            config["GENOME_ANNOTATIONS_PATH"], sep = '\t', comment = '#', header = None, names = annotation_column_names, dtype = annotation_column_dtypes
+            config["PATHS"]["ANNOTATIONS"], sep = '\t', comment = '#', header = None, names = annotation_column_names, dtype = annotation_column_dtypes
         )
         annotations_df = annotations_df[annotations_df["feature"] == "gene"]
         annotations_df = annotations_df[annotations_df['seqname'].isin(config["CHROMOSOMES"])]
@@ -94,7 +94,7 @@ def read_expression():
 
         print("Reading genome sequence file.")
 
-        expression_df = pd.read_csv(config["EXPRESSION_PATH"], sep = "\t")
+        expression_df = pd.read_csv(config["PATHS"]["EXPRESSION"], sep = "\t")
         expression_df["gene"] = expression_df["gene"].str.upper()
 
     except:
